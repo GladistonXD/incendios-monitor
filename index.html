@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Registro de Ocorrências</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .camera-container {
+      position: relative;
+      overflow: hidden;
+      border-radius: 0.5rem;
+    }
+    
+    .camera-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    
+    .camera-container:hover .camera-overlay {
+      opacity: 1;
+    }
+    
+    .status-badge {
+      transition: all 0.3s ease;
+    }
+    
+    .status-badge:hover {
+      transform: scale(1.05);
+    }
+    
+    .map-container {
+      height: 300px;
+      width: 100%;
+      border-radius: 0.5rem;
+    }
+    
+    .pulse {
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+      100% {
+        transform: scale(1);
+      }
+    }
+    
+    .slide-in {
+      animation: slideIn 0.5s forwards;
+    }
+    
+    @keyframes slideIn {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+    
+    .fade-in {
+      animation: fadeIn 0.5s forwards;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    
+    /* Estilos para o modo escuro */
+    .dark-mode {
+      background-color: #1a202c;
+      color: #e2e8f0;
+    }
+    
+    .dark-mode .bg-white {
+      background-color: #2d3748 !important;
+    }
+    
+    .dark-mode .bg-gray-100 {
+      background-color: #4a5568 !important;
+    }
+    
+    .dark-mode .text-gray-800 {
+      color: #e2e8f0 !important;
+    }
+    
+    .dark-mode .border-gray-200 {
+      border-color: #4a5568 !important;
+    }
+    
+    /* Estilos para o modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-content {
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px;
+      border-radius: 0.5rem;
+      width: 80%;
+      max-width: 500px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .dark-mode .modal-content {
+      background-color: #2d3748;
+      color: #e2e8f0;
+    }
+    
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    
+    .close:hover {
+      color: black;
+    }
+    
+    .dark-mode .close:hover {
+      color: white;
+    }
+    
+    /* Estilos para o loader */
+    .loader {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    <header class="flex justify-between items-center mb-6">
+      <div>
+        <h1 class="text-3xl font-bold text-blue-600">Registro de Ocorrências</h1>
+        <p class="text-gray-600">Sistema de monitoramento e controle</p>
+      </div>
+      <div class="flex space-x-2">
+        <button id="darkModeToggle" class="bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition">
+          <i class="fas fa-moon"></i>
+        </button>
+        <button id="syncButton" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-500 transition">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+    </header>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <!-- Painel de Captura -->
+      <div class="md:col-span-2 bg-white rounded-lg shadow-md p-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Capturar Nova Ocorrência</h2>
+        
+        <div class="camera-container mb-4">
+          <video id="video" class="w-full rounded-lg border-2 border-gray-200" autoplay playsinline></video>
+          <div class="camera-overlay">
+            <button id="switchCameraBtn" class="bg-white text-gray-800 px-3 py-2 rounded-lg hover:bg-gray-100 transition mr-2">
+              <i class="fas fa-sync-alt"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label for="comment" class="block text-sm font-medium text-gray-700 mb-1">Descrição da Ocorrência</label>
+            <textarea id="comment" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Descreva a ocorrência..."></textarea>
+          </div>
+          <div>
+            <label for="category" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+            <select id="category" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="infraestrutura">Infraestrutura</option>
+              <option value="seguranca">Segurança</option>
+              <option value="meio_ambiente">Meio Ambiente</option>
+              <option value="transito">Trânsito</option>
+              <option value="outros">Outros</option>
+            </select>
+            
+            <label for="priority" class="block text-sm font-medium text-gray-700 mt-3 mb-1">Prioridade</label>
+            <select id="priority" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="baixa">Baixa</option>
+              <option value="media" selected>Média</option>
+              <option value="alta">Alta</option>
+              <option value="urgente">Urgente</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="flex flex-wrap gap-2 mb-4">
+          <button id="captureBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 transition flex-grow">
+            <i class="fas fa-camera mr-2"></i> Capturar
+          </button>
+          <button id="uploadBtn" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-500 transition flex-grow">
+            <i class="fas fa-upload mr-2"></i> Carregar Imagem
+          </button>
+          <input type="file" id="imageUpload" accept="image/*" class="hidden">
+        </div>
+        
+        <div id="capturePreview" class="hidden mb-4">
+          <div class="relative">
+            <img id="previewImage" class="w-full rounded-lg" src="/placeholder.svg" alt="Preview">
+            <button id="cancelCaptureBtn" class="absolute top-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-500 transition">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <button id="saveCaptureBtn" class="mt-3 w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-500 transition pulse">
+            <i class="fas fa-save mr-2"></i> Salvar Ocorrência
+          </button>
+        </div>
+      </div>
+      
+      <!-- Painel de Estatísticas -->
+      <div class="bg-white rounded-lg shadow-md p-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Estatísticas</h2>
+        
+        <div class="grid grid-cols-2 gap-4 mb-4">
+          <div class="bg-blue-100 p-3 rounded-lg">
+            <p class="text-blue-800 text-sm">Total</p>
+            <p id="totalCount" class="text-2xl font-bold text-blue-600">0</p>
+          </div>
+          <div class="bg-red-100 p-3 rounded-lg">
+            <p class="text-red-800 text-sm">Não Resolvidas</p>
+            <p id="pendingCount" class="text-2xl font-bold text-red-600">0</p>
+          </div>
+          <div class="bg-green-100 p-3 rounded-lg">
+            <p class="text-green-800 text-sm">Resolvidas</p>
+            <p id="resolvedCount" class="text-2xl font-bold text-green-600">0</p>
+          </div>
+          <div class="bg-yellow-100 p-3 rounded-lg">
+            <p class="text-yellow-800 text-sm">Urgentes</p>
+            <p id="urgentCount" class="text-2xl font-bold text-yellow-600">0</p>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <h3 class="text-lg font-medium mb-2 text-gray-800">Categorias</h3>
+          <div id="categoryStats" class="space-y-2">
+            <!-- Preenchido via JavaScript -->
+          </div>
+        </div>
+        
+        <div>
+          <h3 class="text-lg font-medium mb-2 text-gray-800">Exportar Dados</h3>
+          <div class="flex space-x-2">
+            <button id="exportJSON" class="bg-gray-800 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition flex-1">
+              <i class="fas fa-file-code mr-1"></i> JSON
+            </button>
+            <button id="exportCSV" class="bg-green-800 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition flex-1">
+              <i class="fas fa-file-csv mr-1"></i> CSV
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Filtros e Mapa -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+      <div class="md:col-span-1 bg-white rounded-lg shadow-md p-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Filtros</h2>
+        
+        <div class="mb-4">
+          <label for="statusFilter" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select id="statusFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="todos">Todos</option>
+            <option value="Não resolvido">Não resolvidos</option>
+            <option value="Resolvido">Resolvidos</option>
+          </select>
+        </div>
+        
+        <div class="mb-4">
+          <label for="categoryFilter" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+          <select id="categoryFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="todos">Todas</option>
+            <option value="infraestrutura">Infraestrutura</option>
+            <option value="seguranca">Segurança</option>
+            <option value="meio_ambiente">Meio Ambiente</option>
+            <option value="transito">Trânsito</option>
+            <option value="outros">Outros</option>
+          </select>
+        </div>
+        
+        <div class="mb-4">
+          <label for="priorityFilter" class="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+          <select id="priorityFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="todos">Todas</option>
+            <option value="baixa">Baixa</option>
+            <option value="media">Média</option>
+            <option value="alta">Alta</option>
+            <option value="urgente">Urgente</option>
+          </select>
+        </div>
+        
+        <div class="mb-4">
+          <label for="dateFilter" class="block text-sm font-medium text-gray-700 mb-1">Data</label>
+          <select id="dateFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="todos">Todas</option>
+            <option value="hoje">Hoje</option>
+            <option value="semana">Esta semana</option>
+            <option value="mes">Este mês</option>
+          </select>
+        </div>
+        
+        <div class="mb-4">
+          <label for="searchFilter" class="block text-sm font-medium text-gray-700 mb-1">Buscar</label>
+          <input type="text" id="searchFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Buscar nos comentários...">
+        </div>
+        
+        <button id="applyFilters" class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 transition">
+          <i class="fas fa-filter mr-2"></i> Aplicar Filtros
+        </button>
+      </div>
+      
+      <div class="md:col-span-2 bg-white rounded-lg shadow-md p-4">
+        <h2 class="text-xl font-semibold mb-4 text-gray-800">Mapa de Ocorrências</h2>
+        <div id="map" class="map-container"></div>
+      </div>
+    </div>
+    
+    <!-- Lista de Ocorrências -->
+    <div class="mt-6 bg-white rounded-lg shadow-md p-4">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold text-gray-800">Ocorrências Registradas</h2>
+        <span id="itemCount" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">0 itens</span>
+      </div>
+      
+      <div id="gallery" class="space-y-4">
+        <!-- Preenchido via JavaScript -->
+      </div>
+      
+      <div id="noItems" class="text-center py-8 text-gray-500">
+        <i class="fas fa-inbox text-4xl mb-2"></i>
+        <p>Nenhuma ocorrência registrada</p>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Modal de Detalhes -->
+  <div id="detailsModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2 class="text-xl font-semibold mb-4 text-gray-800">Detalhes da Ocorrência</h2>
+      <div id="modalContent">
+        <!-- Preenchido via JavaScript -->
+      </div>
+    </div>
+  </div>
+  
+  <!-- Modal de Confirmação -->
+  <div id="confirmModal" class="modal">
+    <div class="modal-content">
+      <span class="close">&times;</span>
+      <h2 class="text-xl font-semibold mb-4 text-gray-800">Confirmação</h2>
+      <p id="confirmMessage" class="mb-4">Tem certeza que deseja realizar esta ação?</p>
+      <div class="flex justify-end space-x-2">
+        <button id="cancelAction" class="bg-gray-300 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-400 transition">Cancelar</button>
+        <button id="confirmAction" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-500 transition">Confirmar</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Notificações -->
+  <div id="notification" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-lg hidden">
+    <span id="notificationMessage">Mensagem de notificação</span>
+  </div>
+  
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</body>
+</html>
